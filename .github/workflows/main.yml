@@ -1,19 +1,21 @@
-name: Codeball
+name: AI Code Review with OpenAI
+
 on:
-  pull_request: {}
-  pull_request_review_comment:
-    types: [created, edited]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
-  codeball_job:
+  ai_code_review:
     runs-on: ubuntu-latest
-    name: Codeball
     steps:
-      - name: Codeball
-        uses: sturdy-dev/codeball-action@v2
-        with:
-          # For all configuration options see https://github.com/sturdy-dev/codeball-action/blob/v2/action.yml
-          approvePullRequests: "true"
-          labelPullRequestsWhenApproved: "true"
-          labelPullRequestsWhenReviewNeeded: "false"
-          failJobsWhenReviewNeeded: "false"
+    - name: AI Code Review
+      uses: AleksandrFurmenkovOfficial/ai-code-review@v0.8
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        owner: ${{ github.repository_owner }}
+        repo: ${{ github.event.repository.name }}
+        pr_number: ${{ github.event.number }}
+        
+        ai_provider: 'openai'
+        openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+        openai_model: 'gpt-4o'
