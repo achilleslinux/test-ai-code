@@ -1,4 +1,4 @@
-name: AI Code Reviewer
+name: AI Code Reviewer - Avinash
 
 on:
   pull_request:
