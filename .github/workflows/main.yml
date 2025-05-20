@@ -23,6 +23,6 @@ jobs:
       - name: Run AI Code Review with Shippie
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_OLEK }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           bunx shippie --github --openai
