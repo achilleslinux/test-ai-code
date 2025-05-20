@@ -1,38 +1,28 @@
-name: DeepSeek Code Review
+name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, edited, reopened, synchronize]
 
 jobs:
-  deepseek-review:
+  ai-code-review:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout PR code
         uses: actions/checkout@v4
-
-      - name: Install Python & dependencies
-        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-      
-      - name: Install requirements
-        run: |
-          pip install requests python-dotenv
+          fetch-depth: 0  # Required so Shippie can access full commit history
 
-      - name: Get PR diff
-        run: |
-          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Bun runtime
+        uses: oven-sh/setup-bun@v2
 
-      - name: Run DeepSeek Review
+      - name: Install Shippie CLI
+        run: bun add shippie@latest
+
+      - name: Run AI Code Review with Shippie
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: python3 .github/scripts/ai_review.py
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          bunx shippie --github --openai

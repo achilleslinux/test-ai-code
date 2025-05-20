@@ -1,68 +1,64 @@
 import os
-from openai import OpenAI
+import requests
 from github import Github
 
-def get_diff_content():
-    """Read and return the diff content"""
-    with open('pr.diff', 'r') as f:
-        content = f.read().strip()
-        if not content:
-            raise ValueError("No changes detected in the diff file")
-        return content
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
-def get_ai_review(diff_content):
-    """Get code review from OpenAI"""
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
-    response = client.chat.completions.create(
-        model="gpt-4o",  # Correct model name for GPT-4
-        messages=[
+def get_diff_content():
+    """Read the PR diff file."""
+    with open('pr.diff', 'r') as f:
+        diff = f.read().strip()
+        if not diff:
+            raise ValueError("❌ No changes detected in the diff.")
+        return diff
+
+def get_deepseek_review(diff):
+    """Get AI review from DeepSeek."""
+    headers = {
+        "Authorization": f"Bearer {os.getenv('DEEPSEEK_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
             {
                 "role": "system",
-                "content": """You are an expert code reviewer. Provide:
-1. Code quality analysis
-2. Potential bugs
-3. Security concerns
-4. Optimization suggestions
-5. Specific actionable items"""
+                "content": "You are an expert code reviewer. Provide concise feedback on:\n"
+                           "1. Code quality\n2. Security risks\n3. Optimization opportunities\n"
+                           "4. Specific actionable suggestions."
             },
             {
                 "role": "user",
-                "content": f"Review this code diff:\n{diff_content}"
+                "content": f"Review this code diff:\n{diff}"
             }
         ],
-        temperature=0.3,
-        max_tokens=2000
-    )
-    return response.choices[0].message.content
+        "temperature": 0.3,
+        "max_tokens": 2000
+    }
+    response = requests.post(DEEPSEEK_API_URL, json=payload, headers=headers)
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"]
 
-def post_review_comment(review_text):
-    """Post review as GitHub comment"""
-    github_token = os.getenv("GITHUB_TOKEN")
-    if not github_token:
-        print("Skipping GitHub comment - no GITHUB_TOKEN")
+def post_github_comment(review):
+    """Post the review as a comment on the PR."""
+    if not os.getenv("GITHUB_TOKEN"):
+        print("⚠️ Skipping GitHub comment (GITHUB_TOKEN not set)")
         return
-        
-    g = Github(github_token)
-    repo = g.get_repo(os.getenv("GITHUB_REPOSITORY"))
+
+    github = Github(os.getenv("GITHUB_TOKEN"))
+    repo = github.get_repo(os.getenv("GITHUB_REPOSITORY"))
     pr = repo.get_pull(int(os.getenv("PR_NUMBER")))
-    pr.create_issue_comment(f"## AI Code Review\n\n{review_text}")
+    pr.create_issue_comment(f"## 🔍 DeepSeek Code Review\n\n{review}")
 
 def main():
     try:
-        print("Starting code review process...")
-        
+        print("🚀 Starting DeepSeek Code Review...")
         diff = get_diff_content()
-        review = get_ai_review(diff)
-        
-        print("\n=== Review Results ===")
-        print(review)
-        
-        post_review_comment(review)
-        print("\nReview posted successfully!")
-        
+        review = get_deepseek_review(diff)
+        print("\n✅ Review Generated Successfully!")
+        post_github_comment(review)  # Fixed missing parenthesis
     except Exception as e:
-        print(f"\nError during review process: {str(e)}")
+        print(f"❌ Failed: {str(e)}")
         raise
 
 if __name__ == "__main__":
