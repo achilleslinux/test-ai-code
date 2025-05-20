@@ -1,40 +1,18 @@
-name: DeepSeek Code Review
+name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, edited, reopened, synchronize]
 
 jobs:
-  deepseek-review:
+  ai-code-review:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout PR code
+        uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Run AI Code Review
+        uses: DanielJDufour/codereviewgpt@v1.0.6
         with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: |
-          pip install requests PyGithub python-dotenv
-          sudo apt-get install -y gh
-
-      - name: Get PR diff
-        run: |
-          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run DeepSeek Review
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: python3 .github/scripts/ai_review.py
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
