@@ -9,24 +9,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Install GitHub CLI
-        run: sudo apt-get install -y gh
+      - name: Install dependencies
+        run: pip install openai PyGithub
 
-      - name: Get PR Diff
-        id: get_diff
-        run: |
-          echo "Fetching PR diff..."
-          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
+      - name: Get PR diff
+        run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install OpenAI
-        run: pip install openai
-
-      - name: Run AI Review
+      - name: Run AI Code Review
+        run: python3 .github/scripts/ai_review.py
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: python3 .github/scripts/ai_review.py
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
