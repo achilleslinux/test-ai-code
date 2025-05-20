@@ -22,6 +22,7 @@ jobs:
 
       - name: Run Shippie AI Review
         env:
+          CI: true  # 👈 Forces Shippie to recognize GitHub CI
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
