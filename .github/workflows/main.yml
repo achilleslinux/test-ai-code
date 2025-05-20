@@ -1,22 +1,46 @@
-name: AI Code Reviewer
+name: AI Code Review
 
 on:
   pull_request:
-    types:
-      - opened
-      - synchronize
-permissions: write-all
+    types: [opened, synchronize]
+
 jobs:
-  review:
+  ai-review:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repo
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: AI Code Reviewer
-        uses: achilleslinux/ai-code-reviewer@main
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # The GITHUB_TOKEN is there by default so you just need to keep it like it is and not necessarily need to add it as secret as it will throw an error. [More Details](https://docs.github.com/en/actions/security-guides/automatic-token-authentication#about-the-github_token-secret)
+      - name: Get PR Diff
+        id: diff
+        run: |
+          echo "DIFF<<EOF" >> $GITHUB_ENV
+          gh pr diff ${{ github.event.pull_request.number }} >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install OpenAI CLI (or use curl)
+        run: pip install openai
+
+      - name: Send PR diff to OpenAI
+        env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_MODEL: "gpt-4" # Optional: defaults to "gpt-4"
-          exclude: "**/*.json, **/*.md" # Optional: exclude patterns separated by commas
+        run: |
+          python3 -c "
+import openai
+import os
+
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+diff = os.getenv('DIFF')
+prompt = f'Review the following code changes and suggest improvements:\\n{diff}'
+
+response = openai.ChatCompletion.create(
+  model='gpt-4',
+  messages=[{'role': 'user', 'content': prompt}]
+)
+
+print(response['choices'][0]['message']['content'])
+"
