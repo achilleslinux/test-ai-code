@@ -1,37 +1,3 @@
-name: AI Code Review
-
-on:
-  pull_request:
-    types: [opened, synchronize]
-
-jobs:
-  ai-review:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install GitHub CLI
-        run: sudo apt-get install -y gh
-
-      - name: Get PR Diff
-        id: get_diff
-        run: |
-          echo "Fetching PR diff..."
-          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install OpenAI
-        run: pip install openai
-
-      - name: Run AI Review
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          mkdir -p .github/scripts
-          cat << 'EOF' > .github/scripts/ai_review.py
 from openai import OpenAI
 import os
 
