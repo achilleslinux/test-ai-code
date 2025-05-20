@@ -1,3 +1,4 @@
+
 def perform_division():
     try:
         number = int(10)
@@ -25,5 +26,6 @@ def perform_division():
 
 if __name__ == "__main__":
     perform_division()
+    ###
     
 
