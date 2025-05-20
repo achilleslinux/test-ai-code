@@ -1,6 +1,6 @@
 import os
 import requests
-from github import Github  # Requires PyGithub
+from github import Github
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
@@ -12,14 +12,14 @@ def get_diff_content():
             raise ValueError("❌ No changes detected in the diff.")
         return diff
 
-def get_deepseek_review(diff: str) -> str:
+def get_deepseek_review(diff):
     """Get AI review from DeepSeek."""
     headers = {
         "Authorization": f"Bearer {os.getenv('DEEPSEEK_API_KEY')}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "deepseek-chat",  # Or "deepseek-coder" for code-specific reviews
+        "model": "deepseek-chat",
         "messages": [
             {
                 "role": "system",
@@ -36,10 +36,10 @@ def get_deepseek_review(diff: str) -> str:
         "max_tokens": 2000
     }
     response = requests.post(DEEPSEEK_API_URL, json=payload, headers=headers)
-    response.raise_for_status()  # Raise HTTP errors
+    response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
 
-def post_github_comment(review: str):
+def post_github_comment(review):
     """Post the review as a comment on the PR."""
     if not os.getenv("GITHUB_TOKEN"):
         print("⚠️ Skipping GitHub comment (GITHUB_TOKEN not set)")
@@ -56,4 +56,10 @@ def main():
         diff = get_diff_content()
         review = get_deepseek_review(diff)
         print("\n✅ Review Generated Successfully!")
-        post_github_comment(review
+        post_github_comment(review)  # Fixed missing parenthesis
+    except Exception as e:
+        print(f"❌ Failed: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    main()
