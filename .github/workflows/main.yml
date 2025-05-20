@@ -22,7 +22,8 @@ jobs:
       
       - name: Install requirements
         run: |
-          pip install requests python-dotenv
+          pip install requests PyGithub python-dotenv
+          sudo apt-get install -y gh
 
       - name: Get PR diff
         run: |
@@ -34,5 +35,6 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: python3 .github/scripts/ai_review.py
+        run: python3 .github/scripts/deepseek_review.py
