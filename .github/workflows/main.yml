@@ -30,7 +30,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python3 -c "
+          python3 <<EOF
 import openai
 import os
 
@@ -48,4 +48,4 @@ response = openai.ChatCompletion.create(
 
 print('### AI Code Review Suggestion ###')
 print(response['choices'][0]['message']['content'])
-"
+EOF
