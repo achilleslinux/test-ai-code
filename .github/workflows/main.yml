@@ -26,26 +26,7 @@ jobs:
       - name: Install OpenAI
         run: pip install openai
 
-      - name: Send PR diff to OpenAI
+      - name: Run AI Review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          python3 -c '
-import openai
-import os
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-with open("pr.diff", "r") as f:
-    diff = f.read()
-
-prompt = f"""Review the following code changes and suggest improvements:\n{diff}"""
-
-response = openai.ChatCompletion.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}]
-)
-
-print("### AI Code Review Suggestion ###")
-print(response["choices"][0]["message"]["content"])
-'
+        run: python3 .github/scripts/ai_review.py
