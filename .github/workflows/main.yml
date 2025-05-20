@@ -12,35 +12,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
+
       - name: Get PR Diff
-        id: diff
+        id: get_diff
         run: |
-          echo "DIFF<<EOF" >> $GITHUB_ENV
-          gh pr diff ${{ github.event.pull_request.number }} >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "Fetching PR diff..."
+          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install OpenAI CLI (or use curl)
+      - name: Install OpenAI
         run: pip install openai
 
-      - name: Send PR diff to OpenAI
+      - name: Run AI Review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          python3 -c "
-import openai
-import os
-
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
-diff = os.getenv('DIFF')
-prompt = f'Review the following code changes and suggest improvements:\\n{diff}'
-
-response = openai.ChatCompletion.create(
-  model='gpt-4',
-  messages=[{'role': 'user', 'content': prompt}]
-)
-
-print(response['choices'][0]['message']['content'])
-"
+        run: python3 .github/scripts/ai_review.py
