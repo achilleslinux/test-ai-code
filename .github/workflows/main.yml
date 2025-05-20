@@ -30,21 +30,22 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python3 - <<EOF
+          python3 -c "
 import openai
+import os
 
-with open("pr.diff", "r") as f:
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+with open('pr.diff', 'r') as f:
     diff = f.read()
 
-prompt = f"Review the following code changes and suggest improvements:\\n{diff}"
-
-openai.api_key = "${{ secrets.OPENAI_API_KEY }}"
+prompt = f'Review the following code changes and suggest improvements:\\n{diff}'
 
 response = openai.ChatCompletion.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}]
+    model='gpt-4',
+    messages=[{'role': 'user', 'content': prompt}]
 )
 
-print("### AI Code Review Suggestion ###")
-print(response["choices"][0]["message"]["content"])
-EOF
+print('### AI Code Review Suggestion ###')
+print(response['choices'][0]['message']['content'])
+"
