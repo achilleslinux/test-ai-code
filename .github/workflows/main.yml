@@ -1,32 +1,39 @@
-name: AI Code Review
+name: GPT-4 Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  ai-review:
+  code-review:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      pull-requests: write
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install GitHub CLI
-        run: sudo apt-get install -y gh
-
-      - name: Get PR Diff
-        id: get_diff
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
         run: |
-          echo "Fetching PR diff..."
+          sudo apt-get install -y gh
+          pip install openai PyGithub
+          
+      - name: Get PR diff
+        run: |
           gh pr diff ${{ github.event.pull_request.number }} > pr.diff
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install OpenAI
-        run: pip install openai
-
+          
       - name: Run AI Review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python3 .github/scripts/ai_review.py

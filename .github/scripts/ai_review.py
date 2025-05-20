@@ -15,7 +15,7 @@ def get_ai_review(diff_content):
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
     response = client.chat.completions.create(
-        model="gpt-4-turbo",  # Correct model name for GPT-4
+        model="gpt-4o",  # Correct model name for GPT-4
         messages=[
             {
                 "role": "system",
