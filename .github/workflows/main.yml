@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install GitHub CLI
-        run: sudo apt-get install gh -y
+        run: sudo apt-get install -y gh
 
       - name: Get PR Diff
         id: get_diff
@@ -30,13 +30,15 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python3 <<EOF
+          python3 - <<EOF
 import openai
 
 with open("pr.diff", "r") as f:
     diff = f.read()
 
 prompt = f"Review the following code changes and suggest improvements:\\n{diff}"
+
+openai.api_key = "${{ secrets.OPENAI_API_KEY }}"
 
 response = openai.ChatCompletion.create(
     model="gpt-4",
