@@ -12,17 +12,17 @@ jobs:
       - name: Checkout PR code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required so Shippie can access full commit history
+          fetch-depth: 0  # Ensures full commit history for diff
 
       - name: Set up Bun runtime
         uses: oven-sh/setup-bun@v2
 
-      - name: Install Shippie CLI
+      - name: Install Shippie
         run: bun add shippie@latest
 
-      - name: Run AI Code Review with Shippie
+      - name: Run Shippie AI Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          bunx shippie --github --openai
+          bunx shippie review --github --openai --telemetry false
