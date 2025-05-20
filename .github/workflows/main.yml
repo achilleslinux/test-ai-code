@@ -12,7 +12,7 @@ jobs:
       - name: Checkout PR code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensures full commit history for diff
+          fetch-depth: 0
 
       - name: Set up Bun runtime
         uses: oven-sh/setup-bun@v2
@@ -25,4 +25,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          bunx shippie review --github --openai --telemetry false
+          bunx shippie review \
+            --github \
+            --openai \
+            --base ${{ github.event.pull_request.base.sha }} \
+            --head ${{ github.event.pull_request.head.sha }} \
+            --telemetry false
