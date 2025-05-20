@@ -1,3 +1,4 @@
+
 def perform_division():
     try:
         number = int(10)
