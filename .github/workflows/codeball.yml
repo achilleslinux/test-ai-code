@@ -1,19 +1,21 @@
-name: Codeball
 on:
-  pull_request: {}
-  pull_request_review_comment:
-    types: [created, edited]
+  pull_request:
+    types: [opened, synchronize]
 
 jobs:
-  codeball_job:
+  code_review_job:
     runs-on: ubuntu-latest
-    name: Codeball
+    name: ChatGPT Code Review
     steps:
-      - name: Codeball
-        uses: sturdy-dev/codeball-action@v2
+      - name: GenAI Code Review
+        uses: cirolini/genai-code-review@v2
         with:
-          # For all configuration options see https://github.com/sturdy-dev/codeball-action/blob/v2/action.yml
-          approvePullRequests: "true"
-          labelPullRequestsWhenApproved: "true"
-          labelPullRequestsWhenReviewNeeded: "false"
-          failJobsWhenReviewNeeded: "false"
+          openai_api_key: ${{ secrets.openai_api_key }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_pr_id: ${{ github.event.number }}
+          openai_model: "gpt-3.5-turbo" # optional
+          openai_temperature: 0.5 # optional
+          openai_max_tokens: 2048 # optional
+          mode: files # files or patch
+          language: en # optional, default is 'en'
+          custom_prompt: "" # optional
