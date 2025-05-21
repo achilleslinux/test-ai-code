@@ -1,65 +1,48 @@
 import os
+import openai
 import requests
-from github import Github
+import json
 
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+openai.api_key = os.getenv("OPENAI_API_KEY")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_EVENT_PATH = os.getenv("GITHUB_EVENT_PATH")
 
-def get_diff_content():
-    """Read the PR diff file."""
-    with open('pr.diff', 'r') as f:
-        diff = f.read().strip()
-        if not diff:
-            raise ValueError("❌ No changes detected in the diff.")
-        return diff
+# Load GitHub event info
+with open(GITHUB_EVENT_PATH) as f:
+    event = json.load(f)
 
-def get_deepseek_review(diff):
-    """Get AI review from DeepSeek."""
-    headers = {
-        "Authorization": f"Bearer {os.getenv('DEEPSEEK_API_KEY')}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "deepseek-chat",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an expert code reviewer. Provide concise feedback on:\n"
-                           "1. Code quality\n2. Security risks\n3. Optimization opportunities\n"
-                           "4. Specific actionable suggestions."
-            },
-            {
-                "role": "user",
-                "content": f"Review this code diff:\n{diff}"
-            }
-        ],
-        "temperature": 0.3,
-        "max_tokens": 2000
-    }
-    response = requests.post(DEEPSEEK_API_URL, json=payload, headers=headers)
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+pr_number = event["pull_request"]["number"]
+repo = event["repository"]["full_name"]
 
-def post_github_comment(review):
-    """Post the review as a comment on the PR."""
-    if not os.getenv("GITHUB_TOKEN"):
-        print("⚠️ Skipping GitHub comment (GITHUB_TOKEN not set)")
-        return
+# Get the PR diff
+diff_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+headers = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3.diff",
+}
+diff_response = requests.get(diff_url, headers=headers)
+diff = diff_response.text[:12000]  # Truncate for token safety
 
-    github = Github(os.getenv("GITHUB_TOKEN"))
-    repo = github.get_repo(os.getenv("GITHUB_REPOSITORY"))
-    pr = repo.get_pull(int(os.getenv("PR_NUMBER")))
-    pr.create_issue_comment(f"## 🔍 DeepSeek Code Review\n\n{review}")
+# Prepare OpenAI message
+messages = [
+    {"role": "system", "content": "You are an experienced software engineer reviewing a GitHub pull request. Give clear, constructive feedback."},
+    {"role": "user", "content": f"Please review the following GitHub pull request diff:\n\n{diff}"}
+]
 
-def main():
-    try:
-        print("🚀 Starting DeepSeek Code Review...")
-        diff = get_diff_content()
-        review = get_deepseek_review(diff)
-        print("\n✅ Review Generated Successfully!")
-        post_github_comment(review)  # Fixed missing parenthesis
-    except Exception as e:
-        print(f"❌ Failed: {str(e)}")
-        raise
+# Get review from ChatGPT
+response = openai.ChatCompletion.create(
+    model="gpt-4",  # Uses GPT-4-turbo
+    messages=messages,
+    temperature=0.5,
+)
 
-if __name__ == "__main__":
-    main()
+review = response.choices[0].message.content
+
+# Post review comment
+comment_url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+comment_data = {"body": review}
+comment_headers = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3+json",
+}
+requests.post(comment_url, headers=comment_headers, json=comment_data)
