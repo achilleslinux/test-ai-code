@@ -1,5 +1,11 @@
 name: AI PR Review
 
+# ✅ Add necessary permissions to allow posting comments
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -17,7 +23,7 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install openai requests
