@@ -1,36 +1,61 @@
-name: AI Code Review
+name: AI PR Review
 
 on:
   pull_request:
-    types: [opened, reopened, edited, synchronize]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  ai-code-review:
+  ai_review:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          fetch-depth: 0
+          python-version: '3.x'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
+      - name: Install dependencies
+        run: pip install openai requests
 
-      - name: Install Shippie
-        run: npm install shippie@latest
-
-      - name: Run Shippie AI Review
+      - name: Get PR diff and run AI review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          CI: true  # Explicitly force CI mode
         run: |
-          npx shippie review \
-            --github \
-            --openai \
-            --base ${{ github.event.pull_request.base.sha }} \
-            --head ${{ github.event.pull_request.head.sha }} \
-            --telemetry false
+          PR_NUMBER=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
+          REPO_FULL_NAME=$(jq --raw-output .repository.full_name "$GITHUB_EVENT_PATH")
+
+          echo "Fetching PR diff..."
+          DIFF=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            https://api.github.com/repos/$REPO_FULL_NAME/pulls/$PR_NUMBER)
+
+          echo "Sending diff to ChatGPT..."
+          RESPONSE=$(python3 -c "
+import openai, os, sys, textwrap
+
+openai.api_key = os.getenv('OPENAI_API_KEY')
+diff = '''${DIFF}'''
+
+messages = [
+  { 'role': 'system', 'content': 'You are an experienced software engineer reviewing a pull request. Give clear, constructive feedback on code quality, bugs, improvements, and style.' },
+  { 'role': 'user', 'content': f'Please review this pull request diff:\n\n{diff}'[:12000] }  # Keep it under token limit
+]
+
+response = openai.ChatCompletion.create(
+  model='gpt-4',
+  messages=messages,
+  temperature=0.5
+)
+
+review = response['choices'][0]['message']['content']
+print(review)
+")
+
+          echo "Posting review comment..."
+          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$REPO_FULL_NAME/issues/$PR_NUMBER/comments \
+            -d "$(jq -nc --arg body "$RESPONSE" '{ body: $body }')"
