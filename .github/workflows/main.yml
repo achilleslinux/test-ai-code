@@ -1,28 +1,35 @@
-name: AI Code Review
+name: AI PR Review
+
+# ✅ Add necessary permissions to allow posting comments
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
 
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  ai-code-review:
+  ai_review:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout PR code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          fetch-depth: 0  # Required so Shippie can access full commit history
+          python-version: '3.x'
 
-      - name: Set up Bun runtime
-        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install openai requests
 
-      - name: Install Shippie CLI
-        run: bun add shippie@latest
-
-      - name: Run AI Code Review with Shippie
+      - name: Run AI PR Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          bunx shippie --github --openai
+        run: python .github/scripts/ai_review.py

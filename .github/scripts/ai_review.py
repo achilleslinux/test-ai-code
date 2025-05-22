@@ -1,65 +1,71 @@
 import os
+import openai
 import requests
-from github import Github
+import json
 
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+# ✅ Init OpenAI client
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def get_diff_content():
-    """Read the PR diff file."""
-    with open('pr.diff', 'r') as f:
-        diff = f.read().strip()
-        if not diff:
-            raise ValueError("❌ No changes detected in the diff.")
-        return diff
+# ✅ GitHub environment
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_EVENT_PATH = os.getenv("GITHUB_EVENT_PATH")
 
-def get_deepseek_review(diff):
-    """Get AI review from DeepSeek."""
-    headers = {
-        "Authorization": f"Bearer {os.getenv('DEEPSEEK_API_KEY')}",
-        "Content-Type": "application/json"
+# ✅ Load event JSON
+with open(GITHUB_EVENT_PATH) as f:
+    event = json.load(f)
+
+pr_number = event["pull_request"]["number"]
+repo = event["repository"]["full_name"]
+
+# ✅ Fetch PR diff
+diff_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+headers = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3.diff",
+}
+print(f"🔍 Fetching PR diff from {diff_url}")
+diff_response = requests.get(diff_url, headers=headers)
+diff = diff_response.text[:12000]  # Limit input size
+
+# ✅ Prepare OpenAI message
+messages = [
+    {
+        "role": "system",
+        "content": "You are an experienced software engineer reviewing a GitHub pull request. Provide a concise, constructive code review."
+    },
+    {
+        "role": "user",
+        "content": f"Please review this GitHub PR diff:\n\n{diff}"
     }
-    payload = {
-        "model": "deepseek-chat",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an expert code reviewer. Provide concise feedback on:\n"
-                           "1. Code quality\n2. Security risks\n3. Optimization opportunities\n"
-                           "4. Specific actionable suggestions."
-            },
-            {
-                "role": "user",
-                "content": f"Review this code diff:\n{diff}"
-            }
-        ],
-        "temperature": 0.3,
-        "max_tokens": 2000
-    }
-    response = requests.post(DEEPSEEK_API_URL, json=payload, headers=headers)
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+]
 
-def post_github_comment(review):
-    """Post the review as a comment on the PR."""
-    if not os.getenv("GITHUB_TOKEN"):
-        print("⚠️ Skipping GitHub comment (GITHUB_TOKEN not set)")
-        return
+# ✅ Call OpenAI API
+print("🧠 Calling OpenAI API...")
+try:
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",  # Use gpt-4 if you regain quota/access
+        messages=messages,
+        temperature=0.5,
+    )
+    review = response.choices[0].message.content
+    print("✅ Received review:\n", review)
+except Exception as e:
+    print("❌ OpenAI API call failed:", str(e))
+    review = "⚠️ Failed to generate AI review due to API error."
 
-    github = Github(os.getenv("GITHUB_TOKEN"))
-    repo = github.get_repo(os.getenv("GITHUB_REPOSITORY"))
-    pr = repo.get_pull(int(os.getenv("PR_NUMBER")))
-    pr.create_issue_comment(f"## 🔍 DeepSeek Code Review\n\n{review}")
+# ✅ Post comment to GitHub PR
+comment_url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+comment_data = {"body": review}
+comment_headers = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github.v3+json",
+}
+print("📤 Posting comment to PR...")
 
-def main():
-    try:
-        print("🚀 Starting DeepSeek Code Review...")
-        diff = get_diff_content()
-        review = get_deepseek_review(diff)
-        print("\n✅ Review Generated Successfully!")
-        post_github_comment(review)  # Fixed missing parenthesis
-    except Exception as e:
-        print(f"❌ Failed: {str(e)}")
-        raise
+resp = requests.post(comment_url, headers=comment_headers, json=comment_data)
 
-if __name__ == "__main__":
-    main()
+if resp.status_code != 201:
+    print(f"❌ Failed to post comment: {resp.status_code}")
+    print(resp.text)
+else:
+    print("✅ Comment posted successfully.")
