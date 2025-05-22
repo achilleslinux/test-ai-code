@@ -1,27 +1,47 @@
 import random
 
-def guess_number():
-    """A simple number guessing game."""
-    print("Welcome to the Number Guessing Game!")
-    number = random.randint(1, 100)
-    attempts = 0
+
+def rock_paper_scissors():
+    """A simple Rock-Paper-Scissors game."""
+    choices = ['rock', 'paper', 'scissors']
+    score = {'wins': 0, 'losses': 0, 'ties': 0}
+
+    print("Welcome to Rock-Paper-Scissors!")
+    rounds = 0
 
     while True:
-        try:
-            guess = int(input("Guess a number between 1 and 100: "))
-            attempts += 1
+        rounds += 1
+        computer = random.choice(choices)
+        player = input("Enter rock, paper, or scissors (or 'quit' to exit): ").lower()
 
-            if guess < number:
-                print("Too low! Try again.")
-            elif guess > number:
-                print("Too high! Try again.")
-            else:
-                print(f"Congratulations! You guessed the number in {attempts} attempts.")
-                break
+        if player == 'quit':
+            print("Thanks for playing!")
+            break
+        if player not in choices:
+            print("Invalid choice. Please try again.")
+            rounds -= 1
+            continue
 
-        except ValueError:
-            print("Invalid input. Please enter an integer.")
+        print(f"You chose {player}, computer chose {computer}.")
+
+        if player == computer:
+            result = 'tie'
+            score['ties'] += 1
+            print("It's a tie!")
+        elif (player == 'rock' and computer == 'scissors') or \
+             (player == 'paper' and computer == 'rock') or \
+             (player == 'scissors' and computer == 'paper'):
+            result = 'win'
+            score['wins'] += 1
+            print("You win this round!")
+        else:
+            result = 'loss'
+            score['losses'] += 1
+            print("You lose this round.")
+
+    print(f"\nFinal results after {rounds-1} rounds:")
+    print(f"Wins: {score['wins']}, Losses: {score['losses']}, Ties: {score['ties']}")
 
 
 if __name__ == "__main__":
-    guess_number()
+    rock_paper_scissors()
