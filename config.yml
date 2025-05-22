@@ -1,0 +1,488 @@
+version: 2.1
+orbs:
+  aws-s3: circleci/aws-s3@3.1.1
+  aws-cli: circleci/aws-cli@4.0.0
+  sonarcloud: sonarsource/sonarcloud@2.0.0
+  aws-ecr: circleci/aws-ecr@8.2.1
+  kubernetes: circleci/kubernetes@0.11.0
+  helm: circleci/helm@2.0.0
+
+parameters:
+  application_name:
+    type: string
+    default: reporting-application
+  image-tag:
+    type: string
+    default: "latest"
+  default_aws_region:
+    type: string
+    default: eu-central-1
+  action:
+    type: string
+    default: Build
+
+commands:
+  setup-aws-profiles:
+    steps:
+      - run:
+          name: aws profiles setup
+          command: |
+            npx @syngenta-digital/acp --file ./aws/profiles.yml
+            aws sts get-caller-identity
+            
+default_input_params: &default_input_params
+  env:
+    type: string
+    default: env
+  ecr-repo:
+    type: string
+    default: ecr-repo
+  aws_account_number:
+    type: string
+    default: default
+    
+# common config for all env
+common_config: &common_config
+  context: cropwise-trialing-cicd
+
+dev_config: &dev_config
+  <<: *common_config
+  env: dev
+  aws_account_number: "021975952203"
+  ecr-repo: 021975952203.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr
+
+uat_config: &uat_config
+  <<: *common_config
+  env: uat
+  aws_account_number: "021975952203"
+  ecr-repo: 021975952203.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr
+
+qa_config: &qa_config
+  <<: *common_config
+  env: qa
+  aws_account_number: "021975952203"
+  ecr-repo: 021975952203.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr
+
+prod_config: &prod_config
+  <<: *common_config
+  env: prod
+  aws_account_number: "298918323813"
+  ecr-repo: 298918323813.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr
+
+jobs:
+  sonarcloud:
+    docker:
+      - image: cimg/node:18.12.0
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm install --legacy-peer-deps
+      - run:
+          name: Test and coverage
+          command: npm run test:coverage
+      - sonarcloud/scan
+
+  build:
+    parameters:
+      env:
+        type: string
+    docker:
+      - image: cimg/node:18.12.0
+    resource_class: xlarge
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/repo
+      - run:
+          name: Create Production build
+          command: |
+            npm install --legacy-peer-deps
+            ~/repo/node_modules/.bin/env-cmd -f ./.env.<<parameters.env>> npm run build --max-old-space-size=4096
+      - store_artifacts:
+          path: /home/circleci/repo/.npm/_logs
+          destination: logs
+      - save_cache:
+          paths:
+            - ~/repo/node_modules
+            - ~/.npm
+            - ~/.cache
+          key: v1-dependencies-{{ checksum "package.json" }}
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+
+  build-docker:
+    parameters:
+      <<: *default_input_params
+    docker:
+      - image: cimg/base:stable          
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - aws-cli/setup
+      - aws-ecr/ecr-login:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          region: eu-central-1
+      - setup_remote_docker
+      - run: cat ~/.aws/credentials
+      - run: cat ~/.aws/config
+      # - aws-ecr/build-docker:
+      #     account-url: <<parameters.profile>>_ecr_url
+      #     aws-access-key-id: AWS_ACCESS_KEY_ID
+      #     aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+      #     dockerfile: Dockerfile
+      #     extra-build-args: "--build-arg PROFILE=<<parameters.profile>>"
+      #     profile-name: <<parameters.profile>>
+      #     path: .
+      #     region: DEV_AWS_REGION
+      #     repo: web-react-cropwise-trailing
+      #     tag: <<parameters.tag>>
+      - run:
+          name: Build and push Docker images
+          environment:
+            ECR_REPO: << parameters.ecr-repo >>
+            ENV: << parameters.env >>
+            AWS_ACCOUNT_ID: "021975952203"
+          command: |
+            AWS_ACCOUNT_ID: "021975952203"
+            DOCKER_CONTEXT="reporting"
+            DOCKERFILE="reporting/docker/dev/Dockerfile"
+            IMAGE_NAME="${ECR_REPO}-reporting:${ENV}${CIRCLE_SHA1:0:7}"
+            ECR_IMAGE="${ECR_REPO}-reporting:${ENV}-${CIRCLE_SHA1:0:7}"
+
+            echo "IMAGE_NAME: $IMAGE_NAME"
+            echo "DOCKERFILE: $DOCKERFILE"
+
+            docker build -t $IMAGE_NAME -t $ECR_IMAGE -f $DOCKERFILE $DOCKER_CONTEXT
+            docker push $ECR_IMAGE
+  deploy-helm:
+    docker:
+      - image: "cimg/base:stable"
+    parameters:
+      env:
+        type: string
+      ecr-repo:
+        type: string
+      aws_account_number:
+        type: string
+        
+    steps:
+      - checkout
+      - kubernetes/install-kubectl:
+          kubectl-version: v1.24.0
+      - aws-cli/setup
+      - helm/install-helm-client:
+          version: v3.8.2
+      - run: echo -e "[profile <<parameters.env>>]\nrole_arn = arn:aws:iam::021975952203:role/CICD\nsource_profile=default" >> ~/.aws/config
+      - run: aws sts get-caller-identity
+      - run: aws eks --region <<pipeline.parameters.default_aws_region>> list-clusters --profile <<parameters.env>>
+      - run: aws eks --region <<pipeline.parameters.default_aws_region>> update-kubeconfig --name seed-selector-<<parameters.env>> --profile <<parameters.env>>
+      - run: cat ~/.kube/config
+      - run: cat ~/.aws/config
+      - run: cat ~/.aws/credentials
+      - run: kubectl version --short --client
+      - run: kubectl get nodes
+      - run: helm version
+      - run: printenv
+      - run: helm upgrade --install <<pipeline.parameters.application_name>> ./charts -f ./charts/<<parameters.env>>-values.yaml --set model.imageTag=<<pipeline.id>> -n <<parameters.env>> --create-namespace --debug --set-string model.env.AWS_SECRETS_NAME=${<<parameters.env>>_AWS_SECRETS_NAME},model.env.API_CONSUMERS=$API_CONSUMERS
+      - run: kubectl rollout restart deployment <<pipeline.parameters.application_name>>-deployment -n <<parameters.env>>-cropwise-trialing
+      - run: |
+          if ! kubectl rollout status deployment/<<pipeline.parameters.application_name>>-deployment -n <<parameters.env>>-cropwise-trialing --timeout=600s; then
+            echo "Deployment rollout did not complete successfully. Gathering diagnostics..."
+            kubectl describe deployment <<pipeline.parameters.application_name>>-deployment -n <<parameters.env>>
+            exit 1
+          fi
+      - run: |
+          RETRIES=3
+          for i in $(seq 1 $RETRIES); do
+            POD_STATUS=$(kubectl get pods -n <<parameters.env>>-cropwise-trialing -l app=<<pipeline.parameters.application_name>> -o jsonpath='{range .items[*]}{.metadata.name} {.status.phase} {.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}')
+            if [[ "$POD_STATUS" =~ "Running True" ]]; then
+              echo "All pods are running and ready."
+              break
+            else
+              echo "Attempt $i: Not all pods are running and ready. Current status: $POD_STATUS"
+              if [[ $i -eq $RETRIES ]]; then
+                echo "Pods failed to reach Running and Ready status. Gathering diagnostics..."
+                kubectl describe pods -n <<parameters.env>>-cropwise-trialing -l app=<<pipeline.parameters.application_name>>
+                kubectl logs -l app=<<pipeline.parameters.application_name>> -n <<parameters.env>>-cropwise-trialing --all-containers=true --tail=50
+                exit 1
+              fi
+              sleep 300
+            fi
+
+  deploy:
+    parameters:
+      env:
+        type: string
+      bucketprefix:
+        type: string
+      cfid:
+        type: string
+    docker:
+      - image: cimg/node:18.12.0
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - aws-cli/setup
+      - attach_workspace:
+          at: ~/repo
+      - run: npx @syngenta-digital/acp --file aws/profiles.yml
+      - run: aws s3 sync ~/repo/build s3://<<parameters.bucketprefix>> --delete --profile <<parameters.env>>
+      - run: aws cloudfront create-invalidation --distribution-id <<parameters.cfid>> --paths "/*" --profile <<parameters.env>>
+
+workflows:
+  version: 2
+  sonar-analysis:
+    jobs:
+      - sonarcloud:
+          context: 
+            - shared-sonarcloud-token
+            - shared-gemfury-tokens  
+  build-deploy:
+    jobs:
+      - sonarcloud:
+          context: 
+            - shared-sonarcloud-token
+            - shared-gemfury-tokens
+          filters:
+            branches:
+              only:
+                - main
+
+      - build:
+          context:
+            - cropwise-trialing-cicd
+            - shared-gemfury-tokens      
+          matrix:
+            parameters:
+              env: ["dev"]
+          filters:
+            branches:
+              only:
+                - main
+
+      - build:
+          context:
+            - cropwise-trialing-cicd
+            - shared-gemfury-tokens      
+          matrix:
+            parameters:
+              env: ["uat"]
+          filters:
+            tags:
+              only:
+                - /uat\/.*/          
+            branches:
+              only:
+                - release
+
+      - build:
+          context:
+            - cropwise-trialing-cicd
+            - shared-gemfury-tokens      
+          matrix:
+            parameters:
+              env: ["qa"]
+          filters:
+            tags:
+              only:
+                - /qa\/.*/          
+            branches:
+              only:
+                - release
+
+      - build:
+          context:
+            - cropwise-trialing-cicd
+            - shared-gemfury-tokens      
+          matrix:
+            parameters:
+              env: ["prod"]
+          filters:
+            tags:
+              only:
+                - /prod\/.*/          
+            branches:
+              only:
+                - release
+
+      - build-docker:
+          name: build-docker-dev
+          context:
+            - cropwise-trialing-cicd
+          filters:
+            branches:
+              only:
+                - feature/deployment-setup-report
+            tags:
+              only:
+                - /dev-report\/.*/
+
+      - build-docker:
+          name: build-docker-qa
+          context:
+            - cropwise-trialing-cicd
+          filters:
+            branches:
+              only:
+                - qa
+            tags:
+              only:
+                - /qa\/.*/
+
+      - build-docker:
+          name: build-docker-uat
+          context:
+            - cropwise-trialing-cicd
+          filters:
+            branches:
+              only:
+                - uat
+            tags:
+              only:
+                - /uat\/.*/
+
+      - build-docker:
+          name: build-docker-prod
+          context:
+            - cropwise-trialing-cicd
+          filters:
+            branches:
+              only:
+                - prod
+            tags:
+              only:
+                - /prod\/.*/
+
+      - deploy:
+          context:
+            - cropwise-trialing-cicd
+            - shared-gemfury-tokens
+          matrix:
+            parameters:
+              env: ["dev"]
+              bucketprefix: ["dev.trialing.cropwise.com"]
+              cfid: ["E1A7ECSSWWDKOB"]
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - build-<< matrix.env >>
+    
+      - deploy:
+          context:
+            - cropwise-trialing-cicd
+          matrix:
+            parameters:
+              env: ["uat"]
+              bucketprefix: ["uat.trialing.cropwise.com"]
+              cfid: ["E16BG3J61E1UUS"]
+          filters:
+            tags:
+              only: /uat\/.*/
+            branches:
+              only: release
+          requires:
+            - build-<< matrix.env >>
+
+      - deploy:
+          context:
+            - cropwise-trialing-cicd
+          matrix:
+            parameters:
+              env: ["qa"]
+              bucketprefix: ["qa.trialing.cropwise.com"]
+              cfid: ["EUHO1KSWQR2WK"]
+          filters:
+            tags:
+              only: /qa\/.*/          
+            branches:
+              only: release
+          requires:
+            - build-<< matrix.env >>
+
+      - deploy:
+          context:
+            - cropwise-trialing-cicd
+          matrix:
+            parameters:
+              env: ["prod"]
+              bucketprefix: ["prod.trialing.cropwise.com"]
+              cfid: ["E1UH4UNHAM6BZA"]
+          filters:
+            tags:
+              only: /prod\/.*/
+            branches:
+              only: release
+          requires:
+            - build-<< matrix.env >>
+
+      - deploy-helm:
+          name: deploy-helm-dev
+          <<: *dev_config
+          env: "dev"
+          ecr-repo: "298918323813.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr"
+          aws_account_number: "021975952203"
+          filters:
+            branches:
+              only:
+                - feature/deployment-setup-report
+            tags:
+              only:
+                - /dev\/.*/
+          requires:
+            - build-docker-dev
+
+      - deploy-helm:
+          name: deploy-helm-qa
+          <<: *qa_config
+          env: "qa"
+          ecr-repo: "298918323813.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr"
+          aws_account_number: "021975952203"
+          filters:
+            branches:
+              only:
+                - main
+            tags:
+              only:
+                - /qa\/.*/
+          requires:
+            - build-docker-qa
+
+      - deploy-helm:
+          name: deploy-helm-uat
+          <<: *uat_config
+          env: "uat"
+          ecr-repo: "298918323813.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr"
+          aws_account_number: "021975952203"
+          filters:
+            branches:
+              only:
+                - main
+            tags:
+              only:
+                - /uat\/.*/
+          requires:
+            - build-docker-uat
+
+      - deploy-helm:
+          name: deploy-helm-prod
+          <<: *prod_config
+          env: "prod"
+          ecr-repo: "298918323813.dkr.ecr.eu-central-1.amazonaws.com/dev-cropwise-trialing-ecr"
+          aws_account_number: "298918323813"
+            
+          filters:
+            branches:
+              only:
+                - main
+            tags:
+              only:
+                - /prod\/.*/
+          requires:
+            - build-docker-prod
