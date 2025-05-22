@@ -1,64 +1,47 @@
-# def perform_division():
-#     try:
-#         number = int(10)
-#         divisor = int(5)
+import random
 
-#         if divisor == 0:
-#             print("Divisor cannot be zero.")
-#             return
 
-#         count = 0
-#         original = number
+def rock_paper_scissors():
+    """A simple Rock-Paper-Scissors game."""
+    choices = ['rock', 'paper', 'scissors']
+    score = {'wins': 0, 'losses': 0, 'ties': 0}
 
-#         while number % divisor == 0:
-#             number //= divisor
-#             count += 1
-#             print(f"Step {count}: Result = {number}")
+    print("Welcome to Rock-Paper-Scissors!")
+    rounds = 0
 
-#         if count == 0:
-#             print(f"{original} is not divisible by {divisor}.")
-#         else:
-#             print(f"Final result after {count} divisions: {number}")
+    while True:
+        rounds += 1
+        computer = random.choice(choices)
+        player = input("Enter rock, paper, or scissors (or 'quit' to exit): ").lower()
 
-#     except ValueError:
-#         print("Please enter valid integers.")
+        if player == 'quit':
+            print("Thanks for playing!")
+            break
+        if player not in choices:
+            print("Invalid choice. Please try again.")
+            rounds -= 1
+            continue
 
-# if __name__ == "__main__":
-#     perform_division()
-#     ##
-def perform_division():
-    try:
-        number = int(10)
-        divisor = int(5)
+        print(f"You chose {player}, computer chose {computer}.")
 
-        if divisor == 0:
-            print("Divisor cannot be zero.")
-            return
-
-        count = 0
-        original = number
-
-        while number % divisor == 0:
-            number //= divisor
-            count += 1
-            print(f"Step {count}: Result = {number}")
-
-        if count == 0:
-            print(f"{original} is not divisible by {divisor}.")
+        if player == computer:
+            result = 'tie'
+            score['ties'] += 1
+            print("It's a tie!")
+        elif (player == 'rock' and computer == 'scissors') or \
+             (player == 'paper' and computer == 'rock') or \
+             (player == 'scissors' and computer == 'paper'):
+            result = 'win'
+            score['wins'] += 1
+            print("You win this round!")
         else:
-            print(f"Final result after {count} divisions: {number}")
+            result = 'loss'
+            score['losses'] += 1
+            print("You lose this round.")
 
-    except ValueError:
-        print("Please enter valid integers.")
+    print(f"\nFinal results after {rounds-1} rounds:")
+    print(f"Wins: {score['wins']}, Losses: {score['losses']}, Ties: {score['ties']}")
+
 
 if __name__ == "__main__":
-    perform_division()
-    ###
-    
-    
-
-
-
-
-
-
+    rock_paper_scissors()
