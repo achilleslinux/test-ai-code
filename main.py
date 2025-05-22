@@ -1,63 +1,27 @@
-# def perform_division():
-#     try:
-#         number = int(10)
-#         divisor = int(5)
+import random
 
-#         if divisor == 0:
-#             print("Divisor cannot be zero.")
-#             return
+def guess_number():
+    """A simple number guessing game."""
+    print("Welcome to the Number Guessing Game!")
+    number = random.randint(1, 100)
+    attempts = 0
 
-#         count = 0
-#         original = number
+    while True:
+        try:
+            guess = int(input("Guess a number between 1 and 100: "))
+            attempts += 1
 
-#         while number % divisor == 0:
-#             number //= divisor
-#             count += 1
-#             print(f"Step {count}: Result = {number}")
+            if guess < number:
+                print("Too low! Try again.")
+            elif guess > number:
+                print("Too high! Try again.")
+            else:
+                print(f"Congratulations! You guessed the number in {attempts} attempts.")
+                break
 
-#         if count == 0:
-#             print(f"{original} is not divisible by {divisor}.")
-#         else:
-#             print(f"Final result after {count} divisions: {number}")
+        except ValueError:
+            print("Invalid input. Please enter an integer.")
 
-#     except ValueError:
-#         print("Please enter valid integers.")
-
-# if __name__ == "__main__":
-#     perform_division()
-#     ##
-def perform_division():
-    try:
-        number = int(10)
-        divisor = int(5)
-
-        if divisor == 0:
-            print("Divisor cannot be zero.")
-            return
-
-        count = 0
-        original = number
-
-        while number % divisor == 0:
-            number //= divisor
-            count += 1
-            print(f"Step {count}: Result = {number}")
-
-        if count == 0:
-            print(f"{original} is not divisible by {divisor}.")
-        else:
-            print(f"Final result after {count} divisions: {number}")
-
-    except ValueError:
-        print("Please enter valid integers.")
 
 if __name__ == "__main__":
-    perform_division()
-    
-    
-
-
-
-
-
-
+    guess_number()
