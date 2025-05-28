@@ -4,38 +4,44 @@ import openai
 import requests
 from github import Github
 
-# OpenAI init
+# Initialize OpenAI
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Load GitHub event
+# Load GitHub event payload
 GITHUB_EVENT_PATH = os.getenv("GITHUB_EVENT_PATH")
 with open(GITHUB_EVENT_PATH) as f:
     event = json.load(f)
 
-comment = event.get("comment", {}).get("body", "").lower()
+comment_body = event.get("comment", {}).get("body", "").lower()
+
+# Supported commands and their prompts
 supported_commands = {
-    "/review": "You're a code review bot. Review this code patch for quality, bugs, and improvements.",
-    "/optimize": "You're a performance expert. Suggest optimizations or efficiency improvements for this patch.",
-    "/security": "You're a security auditor. Analyze this patch and report any security risks or hardening suggestions.",
-    "/test": "You're a test strategist. Suggest test cases or identify missing test coverage for this patch."
+    "/review": "You're a senior code reviewer. Review the code patch and suggest improvements, flag issues, and explain why.",
+    "/optimize": "You're a performance expert. Suggest performance optimizations and efficiency improvements.",
+    "/security": "You're a security auditor. Identify vulnerabilities and suggest secure coding practices.",
+    "/test": "You're a test engineer. Identify missing test cases and suggest unit or integration tests."
 }
 
-# Determine which command is present
-matched_command = next((cmd for cmd in supported_commands if cmd in comment), None)
+# Match the first valid command
+matched_command = next((cmd for cmd in supported_commands if cmd in comment_body), None)
 if not matched_command:
-    print("🛑 No supported command found.")
+    print("🛑 No valid command found in comment.")
     exit(0)
 
-# Extract info
+# GitHub context
 pr_number = event["issue"]["number"]
 repo_name = event["repository"]["full_name"]
+
+# Initialize GitHub client
 gh = Github(os.getenv("GITHUB_TOKEN"))
 repo = gh.get_repo(repo_name)
 pr = repo.get_pull(pr_number)
 commit_id = pr.head.sha
 
-# Go through each file
+# Collect inline review comments
 comments = []
+
+# Iterate through changed files
 for file in pr.get_files():
     if not file.patch:
         continue
@@ -44,14 +50,17 @@ for file in pr.get_files():
     patch = file.patch
     print(f"🔍 {matched_command} - Analyzing {filename}")
 
-    # Set the prompt based on command
-    prompt = supported_commands[matched_command]
     messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"File: {filename}\nPatch:\n{patch}"}
+        {
+            "role": "system",
+            "content": supported_commands[matched_command]
+        },
+        {
+            "role": "user",
+            "content": f"File: {filename}\nPatch:\n{patch}"
+        }
     ]
 
-    # OpenAI call
     try:
         response = client.chat.completions.create(
             model="gpt-4",
@@ -62,10 +71,10 @@ for file in pr.get_files():
         ai_comment = response.choices[0].message.content.strip()
         print(f"✅ AI response for {filename}")
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"❌ OpenAI error for {filename}: {str(e)}")
         continue
 
-    # Approx inline position (1st added line)
+    # Find the first added line for inline comment
     for i, line in enumerate(patch.split("\n")):
         if line.startswith("+") and not line.startswith("+++"):
             comments.append({
@@ -75,13 +84,13 @@ for file in pr.get_files():
             })
             break
 
-# Post comments
+# Post inline review comments
 if comments:
     print("📤 Posting inline comments...")
     pr.create_review(
         body=f"🤖 AI Review triggered by `{matched_command}`",
         event="COMMENT",
-        commit_id=commit_id,
+        commit=commit_id,  # ✅ Correct key
         comments=comments
     )
     print("✅ Inline review posted.")
