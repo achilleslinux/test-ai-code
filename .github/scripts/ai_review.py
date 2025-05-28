@@ -4,7 +4,7 @@ import openai
 import requests
 from github import Github
 
-# Initialize OpenAI
+# Initialize OpenAI client
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Load GitHub event payload
@@ -22,7 +22,7 @@ supported_commands = {
     "/test": "You're a test engineer. Identify missing test cases and suggest unit or integration tests."
 }
 
-# Match the first valid command
+# Find the command in the comment
 matched_command = next((cmd for cmd in supported_commands if cmd in comment_body), None)
 if not matched_command:
     print("🛑 No valid command found in comment.")
@@ -36,12 +36,13 @@ repo_name = event["repository"]["full_name"]
 gh = Github(os.getenv("GITHUB_TOKEN"))
 repo = gh.get_repo(repo_name)
 pr = repo.get_pull(pr_number)
-commit_id = pr.head.sha
 
-# Collect inline review comments
+# Get full commit object (NOT just SHA)
+commit = repo.get_commit(pr.head.sha)
+
+# Prepare inline review comments
 comments = []
 
-# Iterate through changed files
 for file in pr.get_files():
     if not file.patch:
         continue
@@ -51,14 +52,8 @@ for file in pr.get_files():
     print(f"🔍 {matched_command} - Analyzing {filename}")
 
     messages = [
-        {
-            "role": "system",
-            "content": supported_commands[matched_command]
-        },
-        {
-            "role": "user",
-            "content": f"File: {filename}\nPatch:\n{patch}"
-        }
+        {"role": "system", "content": supported_commands[matched_command]},
+        {"role": "user", "content": f"File: {filename}\nPatch:\n{patch}"}
     ]
 
     try:
@@ -74,7 +69,7 @@ for file in pr.get_files():
         print(f"❌ OpenAI error for {filename}: {str(e)}")
         continue
 
-    # Find the first added line for inline comment
+    # Post comment at first added line
     for i, line in enumerate(patch.split("\n")):
         if line.startswith("+") and not line.startswith("+++"):
             comments.append({
@@ -84,13 +79,13 @@ for file in pr.get_files():
             })
             break
 
-# Post inline review comments
+# Submit the GitHub PR review with inline comments
 if comments:
     print("📤 Posting inline comments...")
     pr.create_review(
         body=f"🤖 AI Review triggered by `{matched_command}`",
         event="COMMENT",
-        commit=commit_id,  # ✅ Correct key
+        commit=commit,  # ✅ Must be a Commit object
         comments=comments
     )
     print("✅ Inline review posted.")
