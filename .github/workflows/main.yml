@@ -1,95 +1,36 @@
-import os
-import json
-import openai
-import requests
-from github import Github
+name: AI PR Review via /review Comment
 
-# Init OpenAI
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
 
-# GitHub env
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_EVENT_PATH = os.getenv("GITHUB_EVENT_PATH")
+on:
+  issue_comment:
+    types: [created]
 
-# Load event
-with open(GITHUB_EVENT_PATH) as f:
-    event = json.load(f)
+jobs:
+  ai_review:
+    if: github.event.issue.pull_request != null && contains(github.event.comment.body, '/review')
+    runs-on: ubuntu-latest
 
-# Only respond to "/review" comments
-if "/review" not in event.get("comment", {}).get("body", "").lower():
-    print("🛑 No /review trigger found.")
-    exit(0)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-# Extract PR and repo info
-pr_number = event["issue"]["number"]
-repo_name = event["repository"]["full_name"]
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-# Init GitHub client
-gh = Github(GITHUB_TOKEN)
-repo = gh.get_repo(repo_name)
-pr = repo.get_pull(pr_number)
-commit_id = pr.head.sha
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install openai requests
 
-# Collect file diffs
-comments = []
-for file in pr.get_files():
-    if not file.patch:
-        continue
-
-    filename = file.filename
-    patch = file.patch
-    print(f"🔍 Analyzing file: {filename}")
-
-    # Create prompt for file
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You're a code review bot. Analyze the following code patch and suggest any improvements or issues. "
-                "Keep feedback specific and relevant to the lines shown."
-            )
-        },
-        {
-            "role": "user",
-            "content": f"File: {filename}\nPatch:\n{patch}"
-        }
-    ]
-
-    # Get review from OpenAI
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=messages,
-            temperature=0.3,
-            max_tokens=800,
-        )
-        ai_comment = response.choices[0].message.content.strip()
-        print(f"✅ AI suggestion for {filename}:\n{ai_comment}")
-    except Exception as e:
-        print(f"❌ OpenAI error for {filename}: {str(e)}")
-        continue
-
-    # Post at first added line as a simple baseline
-    lines = patch.split("\n")
-    for i, line in enumerate(lines):
-        if line.startswith("+") and not line.startswith("+++"):
-            position = i + 1  # Approximate position in diff
-            comments.append({
-                "path": filename,
-                "position": position,
-                "body": ai_comment
-            })
-            break
-
-# Submit review with inline comments
-if comments:
-    print("📤 Posting inline comments...")
-    pr.create_review(
-        body="🤖 AI Review Suggestions",
-        event="COMMENT",
-        commit_id=commit_id,
-        comments=comments
-    )
-    print("✅ Inline review posted.")
-else:
-    print("⚠️ No comments generated.")
+      - name: Run AI PR Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: python .github/scripts/ai_review.py
