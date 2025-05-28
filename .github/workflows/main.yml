@@ -26,11 +26,11 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install openai requests
+          pip install openai requests PyGithub
 
       - name: Run AI PR Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
-        run: python .github/scripts/ai_review.py
+        run: python .github/scripts/ai_review_inline.py
