@@ -11,7 +11,12 @@ on:
 
 jobs:
   ai_review:
-    if: github.event.issue.pull_request != null && contains(github.event.comment.body, '/review')
+    if: github.event.issue.pull_request != null && (
+         contains(github.event.comment.body, '/review') ||
+         contains(github.event.comment.body, '/optimize') ||
+         contains(github.event.comment.body, '/security') ||
+         contains(github.event.comment.body, '/test')
+       )
     runs-on: ubuntu-latest
 
     steps:
@@ -25,12 +30,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
           pip install openai requests PyGithub
+
+      - name: Print GitHub event JSON (for debug)
+        run: cat "$GITHUB_EVENT_PATH"
 
       - name: Run AI PR Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
-        run: python .github/scripts/ai_review.py
+        run: python .github/scripts/ai_review_inline.py
